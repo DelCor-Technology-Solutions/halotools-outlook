@@ -1174,6 +1174,48 @@
     });
   }
 
+  // Outlook on the web / new Outlook dispatcher bug (OfficeDev/office-js
+  // #6782, #6960): for unified-manifest add-ins whose autoRunEvents point at
+  // an executeFunction action, the host fires the messageSending invocation
+  // into this runtime with `callbackName` present but null. Office.js then
+  // throws inside _verifyManifestCallback(undefined).trim() BEFORE looking up
+  // our handler, and Outlook reports the add-in as "unavailable and can't
+  // process your email" the instant Send is clicked — while task panes from
+  // the same add-in keep working. Our registration under
+  // Office.actions._association is intact the whole time; only the name on
+  // the invocation is missing. Filling it in from the manifest's action id
+  // lets the dispatch reach the handler (reporters on #6782 confirmed the
+  // handler then runs to completion with no dialog). The invocation is
+  // queued and flushed when associate() runs, so this MUST be installed
+  // before the associate call below. No-op once Microsoft's fix is present
+  // (callbackName arrives populated) and in runtimes without OSF.
+  function installCallbackNameShim() {
+    try {
+      if (typeof OSF === "undefined" || !OSF.EventDispatch || !OSF.EventDispatch.prototype ||
+          typeof OSF.EventDispatch.prototype.fireEvent !== "function") {
+        return false;
+      }
+      var original = OSF.EventDispatch.prototype.fireEvent;
+      OSF.EventDispatch.prototype.fireEvent = function (payload) {
+        try {
+          if (payload && typeof payload === "object" &&
+              Object.prototype.hasOwnProperty.call(payload, "callbackName") &&
+              payload.callbackName == null) {
+            payload.callbackName = "onMessageSendHandler";
+            logEvent("warn", "dispatch arrived without callbackName — filled from manifest (office-js #6782)", {
+              type: payload.type || null, appCommandId: payload.appCommandId || null,
+            });
+          }
+        } catch (e) { /* never interfere with dispatch */ }
+        return original.apply(this, arguments);
+      };
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  logEvent("info", "callbackName shim " + (installCallbackNameShim() ? "installed" : "not applicable"));
+
   // Register at module load — NOT inside Office.onReady. Microsoft's reference
   // implementations (smart-alerts-walkthrough sample) call associate at top
   // level so the handler is wired before Outlook dispatches the event, and in
