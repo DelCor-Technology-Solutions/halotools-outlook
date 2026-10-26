@@ -61,6 +61,20 @@ npm run validate-manifest    # office-addin-manifest validate apps/outlook/publi
 
 Manifest validation needs network access to `developer.microsoft.com` for the schema fetch.
 
+Local HTTPS for Outlook sideloading: run `npx office-addin-dev-certs install` once; the
+outlook vite config picks the cert up from `~/.office-addin-dev-certs`. The package is
+deliberately not a dependency (its mkcert → node-forge chain carries an unpatched advisory).
+
+## Dependencies and CI
+
+- `.github/workflows/ci.yml` runs typecheck, every build and `npm audit --audit-level=moderate`
+  on push/PR and weekly. A moderate-or-higher advisory in the lockfile fails the build; an
+  accepted risk must be documented in `SECURITY.md` and excluded there explicitly (none today).
+- `.github/dependabot.yml` opens weekly update PRs (npm grouped minor/patch, GitHub Actions, Docker).
+- Stay on the latest stable major of each dependency. Vite 8 (rolldown) + `@vitejs/plugin-react` 6,
+  zod 4, `@modelcontextprotocol/sdk` 1.32+, `office-addin-manifest` 3. Vite 8 needs Node 20.19+ /
+  22.12+ (Dockerfile uses `node:20-alpine`, which satisfies it).
+
 ## Threading model (Outlook)
 
 Email-to-ticket threading uses RFC 5322 headers — no Halo custom fields, no admin setup.
